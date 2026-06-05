@@ -1,0 +1,866 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>mdreview</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #111111;
+        --panel: #171717;
+        --paper: #f5f0e6;
+        --paper-text: #1d2a22;
+        --muted: #8f9691;
+        --line: #2a2a2a;
+        --accent: #2f8cff;
+        --accent-soft: rgba(47, 140, 255, 0.22);
+        --green: #1f7a53;
+        --zoom: 1;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: #eeeeee;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      .app {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 380px;
+        height: 100vh;
+      }
+
+      .doc-wrap {
+        overflow: auto;
+        padding: 40px 28px 96px;
+      }
+
+      .pages {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 28px;
+        width: min(900px, calc(100vw - 460px));
+        margin: 0 auto;
+        transform: scale(var(--zoom));
+        transform-origin: top center;
+      }
+
+      .pages.two-up {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: min(1500px, calc(100vw - 460px));
+        align-items: start;
+      }
+
+      .page {
+        min-height: 960px;
+        padding: 56px 70px 90px;
+        background: var(--paper);
+        color: var(--paper-text);
+        border-radius: 6px;
+        box-shadow: 0 20px 80px rgba(0, 0, 0, 0.3);
+        font-family: ui-serif, Georgia, "Times New Roman", serif;
+        line-height: 1.62;
+      }
+
+      .page-num {
+        margin-top: 10px;
+        color: #797d78;
+        text-align: center;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 12px;
+      }
+
+      .doc {
+        width: min(900px, calc(100vw - 460px));
+        margin: 0 auto;
+        padding: 56px 70px 90px;
+        background: var(--paper);
+        color: var(--paper-text);
+        border-radius: 6px;
+        box-shadow: 0 20px 80px rgba(0, 0, 0, 0.3);
+        font-family: ui-serif, Georgia, "Times New Roman", serif;
+        line-height: 1.62;
+        transform: scale(var(--zoom));
+        transform-origin: top center;
+      }
+
+      .page h1,
+      .page h2,
+      .page h3 {
+        line-height: 1.08;
+        margin: 1.3em 0 0.45em;
+      }
+
+      .page h1 {
+        margin-top: 0;
+        font-size: 48px;
+      }
+
+      .page h2 {
+        font-size: 30px;
+        border-top: 1px solid rgba(29, 42, 34, 0.2);
+        padding-top: 24px;
+      }
+
+      .page h3 {
+        font-size: 22px;
+      }
+
+      .page p,
+      .page li {
+        font-size: 18px;
+      }
+
+      .page code {
+        padding: 2px 6px;
+        border-radius: 4px;
+        background: rgba(29, 42, 34, 0.09);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.9em;
+      }
+
+      .page pre {
+        overflow: auto;
+        padding: 16px;
+        border-radius: 6px;
+        background: #162018;
+        color: #f2f5ec;
+      }
+
+      .page pre code {
+        padding: 0;
+        background: transparent;
+      }
+
+      .page table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 18px 0;
+        font-size: 16px;
+      }
+
+      .page th,
+      .page td {
+        border: 1px solid rgba(29, 42, 34, 0.22);
+        padding: 8px 10px;
+        vertical-align: top;
+      }
+
+      .page th {
+        background: rgba(31, 122, 83, 0.12);
+      }
+
+      .mark {
+        background: rgba(47, 140, 255, 0.2);
+        outline: 2px solid rgba(47, 140, 255, 0.75);
+        border-radius: 2px;
+      }
+
+      .panel {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        border-left: 1px solid var(--line);
+        background: var(--panel);
+      }
+
+      .panel-head {
+        padding: 18px 18px 14px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .panel-title {
+        margin: 0;
+        font-size: 17px;
+        font-weight: 650;
+      }
+
+      .file {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 12px;
+        overflow-wrap: anywhere;
+      }
+
+      .composer {
+        padding: 14px 18px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .selected {
+        min-height: 48px;
+        margin-bottom: 10px;
+        padding: 10px;
+        border-radius: 6px;
+        background: #202020;
+        color: #c8cec9;
+        font-size: 13px;
+        line-height: 1.35;
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 92px;
+        resize: vertical;
+        padding: 10px;
+        border: 1px solid #333333;
+        border-radius: 6px;
+        background: #101010;
+        color: #eeeeee;
+        font: inherit;
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      button {
+        border: 0;
+        border-radius: 6px;
+        padding: 9px 12px;
+        background: #2a2a2a;
+        color: #eeeeee;
+        font: inherit;
+        font-size: 13px;
+        cursor: pointer;
+      }
+
+      button.primary {
+        background: var(--accent);
+        color: white;
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.45;
+      }
+
+      .row {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      .comments {
+        flex: 1;
+        overflow: auto;
+        padding: 14px 18px;
+      }
+
+      .comment {
+        padding: 12px;
+        margin-bottom: 10px;
+        border: 1px solid #2c2c2c;
+        border-radius: 6px;
+        background: #1d1d1d;
+      }
+
+      .comment small {
+        display: block;
+        color: var(--muted);
+        margin-bottom: 8px;
+      }
+
+      .quote {
+        color: #d5dbd7;
+        font-size: 13px;
+        line-height: 1.35;
+        margin-bottom: 8px;
+      }
+
+      .feedback {
+        color: #ffffff;
+        font-size: 14px;
+        line-height: 1.45;
+        white-space: pre-wrap;
+      }
+
+      .panel-foot {
+        padding: 14px 18px 18px;
+        border-top: 1px solid var(--line);
+      }
+
+      .toast {
+        min-height: 18px;
+        margin-top: 8px;
+        color: #b8c2ba;
+        font-size: 12px;
+      }
+
+      .view-tools {
+        position: fixed;
+        left: calc((100vw - 380px) / 2);
+        bottom: 18px;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 999px;
+        background: rgba(32, 32, 32, 0.88);
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.38);
+        backdrop-filter: blur(10px);
+        transform: translateX(-50%);
+      }
+
+      .tool-button {
+        min-width: 34px;
+        height: 30px;
+        padding: 0 10px;
+        border-radius: 999px;
+        color: #aeb6b0;
+        background: transparent;
+      }
+
+      .tool-button.active {
+        background: var(--accent);
+        color: #ffffff;
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18) inset;
+      }
+
+      .zoom-label {
+        min-width: 48px;
+        text-align: center;
+        color: #e6e6e6;
+        font-size: 12px;
+      }
+
+      @media (max-width: 900px) {
+        .app {
+          grid-template-columns: 1fr;
+          grid-template-rows: minmax(0, 1fr) 360px;
+        }
+
+        .panel {
+          border-left: 0;
+          border-top: 1px solid var(--line);
+        }
+
+        .pages,
+        .pages.two-up {
+          width: min(100%, 720px);
+          grid-template-columns: 1fr;
+        }
+
+        .page {
+          padding: 34px 24px 60px;
+        }
+
+        .page h1 {
+          font-size: 34px;
+        }
+
+        .view-tools {
+          left: 50%;
+          bottom: 372px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <main class="doc-wrap">
+        <div id="doc" class="pages"></div>
+      </main>
+
+      <div class="view-tools" aria-label="Document view controls">
+        <button id="single-page" class="tool-button" title="Single-column page layout">1 col</button>
+        <button id="two-page" class="tool-button active" title="Two-column page layout">2 col</button>
+        <button id="zoom-out" class="tool-button" title="Zoom out">-</button>
+        <div id="zoom-label" class="zoom-label">100%</div>
+        <button id="zoom-in" class="tool-button" title="Zoom in">+</button>
+      </div>
+
+      <aside class="panel">
+        <div class="panel-head">
+          <h1 class="panel-title">Review</h1>
+          <div id="file" class="file"></div>
+        </div>
+
+        <div class="composer">
+          <div id="selected" class="selected">Select text in the document to add a comment.</div>
+          <textarea id="note" placeholder="Write feedback for the selected text"></textarea>
+          <div class="row">
+            <button id="add" class="primary" disabled>Add comment</button>
+            <button id="clear">Clear</button>
+          </div>
+        </div>
+
+        <div id="comments" class="comments"></div>
+
+        <div class="panel-foot">
+          <button id="copy" class="primary">Copy for Agent</button>
+          <button id="reset">Reset</button>
+          <div id="toast" class="toast"></div>
+        </div>
+      </aside>
+    </div>
+
+    <script>
+      const state = {
+        file: "",
+        absolutePath: "",
+        title: "",
+        selectedText: "",
+        heading: "",
+        comments: [],
+        viewMode: "two-up",
+        zoom: 1,
+      };
+
+      const docEl = document.querySelector("#doc");
+      const fileEl = document.querySelector("#file");
+      const selectedEl = document.querySelector("#selected");
+      const noteEl = document.querySelector("#note");
+      const addEl = document.querySelector("#add");
+      const commentsEl = document.querySelector("#comments");
+      const toastEl = document.querySelector("#toast");
+      const zoomLabelEl = document.querySelector("#zoom-label");
+      const singlePageEl = document.querySelector("#single-page");
+      const twoPageEl = document.querySelector("#two-page");
+
+      boot();
+
+      async function boot() {
+        const res = await fetch("/api/document");
+        const payload = await res.json();
+        state.file = payload.file;
+        state.absolutePath = payload.absolutePath;
+        state.title = payload.title;
+        fileEl.textContent = payload.file;
+        renderPages(payload.markdown);
+        loadSaved();
+        loadViewPrefs();
+        applyViewPrefs();
+        renderComments();
+      }
+
+      document.addEventListener("selectionchange", () => {
+        const selection = window.getSelection();
+        if (!selection || selection.isCollapsed || !docEl.contains(selection.anchorNode)) return;
+        const text = selection.toString().trim();
+        if (!text) return;
+        state.selectedText = compact(text, 700);
+        state.heading = nearestHeading(selection.anchorNode);
+        selectedEl.textContent = state.selectedText;
+        addEl.disabled = false;
+      });
+
+      addEl.addEventListener("click", () => {
+        const comment = noteEl.value.trim();
+        if (!state.selectedText || !comment) return;
+        state.comments.push({
+          id: crypto.randomUUID(),
+          file: state.file,
+          heading: state.heading,
+          selectedText: state.selectedText,
+          comment,
+          createdAt: new Date().toISOString(),
+        });
+        noteEl.value = "";
+        selectedEl.textContent = "Select text in the document to add another comment.";
+        state.selectedText = "";
+        addEl.disabled = true;
+        window.getSelection().removeAllRanges();
+        save();
+        renderComments();
+      });
+
+      document.querySelector("#clear").addEventListener("click", () => {
+        noteEl.value = "";
+        state.selectedText = "";
+        selectedEl.textContent = "Select text in the document to add a comment.";
+        addEl.disabled = true;
+        window.getSelection().removeAllRanges();
+      });
+
+      document.querySelector("#reset").addEventListener("click", () => {
+        state.comments = [];
+        save();
+        renderComments();
+      });
+
+      document.querySelector("#copy").addEventListener("click", async () => {
+        const prompt = buildPrompt();
+        await navigator.clipboard.writeText(prompt);
+        toastEl.textContent = `Copied ${state.comments.length} comment${state.comments.length === 1 ? "" : "s"} for agent.`;
+        setTimeout(() => (toastEl.textContent = ""), 2200);
+      });
+
+      singlePageEl.addEventListener("click", () => {
+        state.viewMode = "one-up";
+        applyViewPrefs();
+        saveViewPrefs();
+      });
+
+      twoPageEl.addEventListener("click", () => {
+        state.viewMode = "two-up";
+        applyViewPrefs();
+        saveViewPrefs();
+      });
+
+      document.querySelector("#zoom-out").addEventListener("click", () => {
+        state.zoom = Math.max(0.7, Math.round((state.zoom - 0.1) * 10) / 10);
+        applyViewPrefs();
+        saveViewPrefs();
+      });
+
+      document.querySelector("#zoom-in").addEventListener("click", () => {
+        state.zoom = Math.min(1.4, Math.round((state.zoom + 0.1) * 10) / 10);
+        applyViewPrefs();
+        saveViewPrefs();
+      });
+
+      function applyViewPrefs() {
+        docEl.classList.toggle("two-up", state.viewMode === "two-up");
+        singlePageEl.classList.toggle("active", state.viewMode === "one-up");
+        twoPageEl.classList.toggle("active", state.viewMode === "two-up");
+        document.documentElement.style.setProperty("--zoom", String(state.zoom));
+        zoomLabelEl.textContent = `${Math.round(state.zoom * 100)}%`;
+      }
+
+      function saveViewPrefs() {
+        localStorage.setItem("mdreview:view", JSON.stringify({
+          viewMode: state.viewMode,
+          zoom: state.zoom,
+        }));
+      }
+
+      function loadViewPrefs() {
+        try {
+          const prefs = JSON.parse(localStorage.getItem("mdreview:view") || "{}");
+          if (prefs.viewMode === "single") state.viewMode = "one-up";
+          if (prefs.viewMode === "spread") state.viewMode = "two-up";
+          if (prefs.viewMode === "one-up" || prefs.viewMode === "two-up") state.viewMode = prefs.viewMode;
+          if (typeof prefs.zoom === "number") state.zoom = Math.min(1.4, Math.max(0.7, prefs.zoom));
+        } catch {
+          state.viewMode = "two-up";
+          state.zoom = 1;
+        }
+      }
+
+      function renderComments() {
+        if (state.comments.length === 0) {
+          commentsEl.innerHTML = '<div class="file">No comments yet.</div>';
+          return;
+        }
+
+        commentsEl.innerHTML = state.comments.map((item, index) => `
+          <div class="comment">
+            <small>${index + 1}. ${escapeHtml(item.heading || "Document")}</small>
+            <div class="quote">"${escapeHtml(item.selectedText)}"</div>
+            <div class="feedback">${escapeHtml(item.comment)}</div>
+            <div class="row">
+              <button data-delete="${item.id}">Delete</button>
+            </div>
+          </div>
+        `).join("");
+
+        commentsEl.querySelectorAll("[data-delete]").forEach((button) => {
+          button.addEventListener("click", () => {
+            state.comments = state.comments.filter((item) => item.id !== button.dataset.delete);
+            save();
+            renderComments();
+          });
+        });
+      }
+
+      function buildPrompt() {
+        const comments = state.comments.map((item, index) => {
+          return `${index + 1}. ${item.heading ? `Under "${item.heading}"` : "In the document"}
+Selected text:
+"${item.selectedText}"
+
+Feedback:
+${item.comment}`;
+        }).join("\n\n");
+
+        return `Please revise \`${state.file}\` using the anchored review comments below.
+
+Rules:
+- Preserve the current structure unless explicitly requested.
+- Resolve each comment concretely.
+- Keep the document concise.
+
+Comments:
+
+${comments || "(No comments were provided.)"}`;
+      }
+
+      function nearestHeading(node) {
+        let el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+        while (el && el !== docEl) {
+          let prev = el;
+          while (prev) {
+            if (/^H[1-6]$/.test(prev.tagName)) return prev.textContent.trim();
+            prev = prev.previousElementSibling;
+          }
+          el = el.parentElement;
+        }
+        return "";
+      }
+
+      function save() {
+        localStorage.setItem(storageKey(), JSON.stringify(state.comments));
+      }
+
+      function loadSaved() {
+        try {
+          state.comments = JSON.parse(localStorage.getItem(storageKey()) || "[]");
+        } catch {
+          state.comments = [];
+        }
+      }
+
+      function storageKey() {
+        return `mdreview:${state.absolutePath}`;
+      }
+
+      function renderPages(markdown) {
+        const blocks = parseMarkdownBlocks(markdown);
+        const pages = paginateBlocks(blocks);
+        docEl.innerHTML = pages.map((page, index) => `
+          <div>
+            <section class="page">${page.join("\n")}</section>
+            <div class="page-num">Page ${index + 1}</div>
+          </div>
+        `).join("");
+      }
+
+      function parseMarkdownBlocks(markdown) {
+        const lines = markdown.replace(/\r\n/g, "\n").split("\n");
+        const blocks = [];
+        let inCode = false;
+        let list = null;
+        let table = [];
+        let code = [];
+
+        const push = (html, weight = 1) => blocks.push({ html, weight });
+
+        const flushList = () => {
+          if (!list) return;
+          push(`${list.open}${list.items.join("")}${list.close}`, Math.max(1, list.items.length * 0.85));
+          list = null;
+        };
+
+        const flushTable = () => {
+          if (table.length === 0) return;
+          const rows = table.filter((row) => !/^\s*\|?\s*:?-{3,}:?\s*\|/.test(row));
+          const html = ["<table>"];
+          rows.forEach((row, index) => {
+            const cells = row.replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim());
+            html.push("<tr>" + cells.map((cell) => `${index === 0 ? "<th>" : "<td>"}${inline(cell)}${index === 0 ? "</th>" : "</td>"}`).join("") + "</tr>");
+          });
+          html.push("</table>");
+          push(html.join(""), Math.max(2, rows.length * 0.9));
+          table = [];
+        };
+
+        const flushCode = () => {
+          if (code.length === 0) return;
+          push(`<pre><code>${code.map(escapeHtml).join("\n")}</code></pre>`, Math.max(2, code.length * 0.7));
+          code = [];
+        };
+
+        for (const line of lines) {
+          if (line.startsWith("```")) {
+            flushList();
+            flushTable();
+            if (inCode) flushCode();
+            inCode = !inCode;
+            continue;
+          }
+
+          if (inCode) {
+            code.push(line);
+            continue;
+          }
+
+          if (/^\s*\|.+\|\s*$/.test(line)) {
+            flushList();
+            table.push(line);
+            continue;
+          }
+          flushTable();
+
+          const heading = /^(#{1,6})\s+(.+)$/.exec(line);
+          if (heading) {
+            flushList();
+            const level = heading[1].length;
+            push(`<h${level}>${inline(heading[2])}</h${level}>`, level === 1 ? 3.2 : level === 2 ? 2.3 : 1.6);
+            continue;
+          }
+
+          const unordered = /^\s*[-*]\s+(.+)$/.exec(line);
+          if (unordered) {
+            if (!list || list.type !== "ul") {
+              flushList();
+              list = { type: "ul", open: "<ul>", close: "</ul>", items: [] };
+            }
+            list.items.push(`<li>${inline(unordered[1])}</li>`);
+            continue;
+          }
+
+          const ordered = /^\s*\d+\.\s+(.+)$/.exec(line);
+          if (ordered) {
+            if (!list || list.type !== "ol") {
+              flushList();
+              list = { type: "ol", open: "<ol>", close: "</ol>", items: [] };
+            }
+            list.items.push(`<li>${inline(ordered[1])}</li>`);
+            continue;
+          }
+
+          if (!line.trim()) {
+            flushList();
+            continue;
+          }
+
+          flushList();
+          push(`<p>${inline(line)}</p>`, Math.max(1, line.length / 72));
+        }
+
+        flushList();
+        flushTable();
+        flushCode();
+        return blocks;
+      }
+
+      function paginateBlocks(blocks) {
+        const maxWeight = 18;
+        const pages = [];
+        let page = [];
+        let weight = 0;
+
+        for (const block of blocks) {
+          if (page.length > 0 && weight + block.weight > maxWeight) {
+            pages.push(page);
+            page = [];
+            weight = 0;
+          }
+          page.push(block.html);
+          weight += block.weight;
+        }
+
+        if (page.length > 0) pages.push(page);
+        return pages;
+      }
+
+      function renderMarkdown(markdown) {
+        const lines = markdown.replace(/\r\n/g, "\n").split("\n");
+        const out = [];
+        let inCode = false;
+        let list = null;
+        let table = [];
+
+        const flushList = () => {
+          if (!list) return;
+          out.push(`</${list}>`);
+          list = null;
+        };
+
+        const flushTable = () => {
+          if (table.length === 0) return;
+          const rows = table.filter((row) => !/^\s*\|?\s*:?-{3,}:?\s*\|/.test(row));
+          out.push("<table>");
+          rows.forEach((row, index) => {
+            const cells = row.replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim());
+            out.push("<tr>" + cells.map((cell) => `${index === 0 ? "<th>" : "<td>"}${inline(cell)}${index === 0 ? "</th>" : "</td>"}`).join("") + "</tr>");
+          });
+          out.push("</table>");
+          table = [];
+        };
+
+        for (const line of lines) {
+          if (line.startsWith("```")) {
+            flushList();
+            flushTable();
+            inCode = !inCode;
+            out.push(inCode ? "<pre><code>" : "</code></pre>");
+            continue;
+          }
+
+          if (inCode) {
+            out.push(escapeHtml(line) + "\n");
+            continue;
+          }
+
+          if (/^\s*\|.+\|\s*$/.test(line)) {
+            flushList();
+            table.push(line);
+            continue;
+          }
+          flushTable();
+
+          const heading = /^(#{1,6})\s+(.+)$/.exec(line);
+          if (heading) {
+            flushList();
+            const level = heading[1].length;
+            out.push(`<h${level}>${inline(heading[2])}</h${level}>`);
+            continue;
+          }
+
+          const unordered = /^\s*[-*]\s+(.+)$/.exec(line);
+          if (unordered) {
+            if (list !== "ul") {
+              flushList();
+              list = "ul";
+              out.push("<ul>");
+            }
+            out.push(`<li>${inline(unordered[1])}</li>`);
+            continue;
+          }
+
+          const ordered = /^\s*\d+\.\s+(.+)$/.exec(line);
+          if (ordered) {
+            if (list !== "ol") {
+              flushList();
+              list = "ol";
+              out.push("<ol>");
+            }
+            out.push(`<li>${inline(ordered[1])}</li>`);
+            continue;
+          }
+
+          if (!line.trim()) {
+            flushList();
+            out.push("");
+            continue;
+          }
+
+          flushList();
+          out.push(`<p>${inline(line)}</p>`);
+        }
+
+        flushList();
+        flushTable();
+        return out.join("\n");
+      }
+
+      function inline(text) {
+        return escapeHtml(text)
+          .replace(/`([^`]+)`/g, "<code>$1</code>")
+          .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+          .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+      }
+
+      function compact(text, limit) {
+        return text.length > limit ? text.slice(0, limit - 1) + "..." : text;
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+    </script>
+  </body>
+</html>
