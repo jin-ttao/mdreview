@@ -408,6 +408,8 @@
         title: "",
         selectedText: "",
         heading: "",
+        lineStart: null,
+        lineEnd: null,
         comments: [],
         viewMode: "two-up",
         zoom: 1,
@@ -447,7 +449,10 @@
         if (!text) return;
         state.selectedText = compact(text, 700);
         state.heading = nearestHeading(selection.anchorNode);
-        selectedEl.textContent = state.selectedText;
+        const lineRange = nearestLineRange(selection.anchorNode);
+        state.lineStart = lineRange.lineStart;
+        state.lineEnd = lineRange.lineEnd;
+        selectedEl.textContent = `${formatLineRange(state)}\n${state.selectedText}`;
         addEl.disabled = false;
       });
 
@@ -458,6 +463,8 @@
           id: crypto.randomUUID(),
           file: state.file,
           heading: state.heading,
+          lineStart: state.lineStart,
+          lineEnd: state.lineEnd,
           selectedText: state.selectedText,
           comment,
           createdAt: new Date().toISOString(),
@@ -465,6 +472,8 @@
         noteEl.value = "";
         selectedEl.textContent = "Select text in the document to add another comment.";
         state.selectedText = "";
+        state.lineStart = null;
+        state.lineEnd = null;
         addEl.disabled = true;
         window.getSelection().removeAllRanges();
         save();
@@ -474,6 +483,8 @@
       document.querySelector("#clear").addEventListener("click", () => {
         noteEl.value = "";
         state.selectedText = "";
+        state.lineStart = null;
+        state.lineEnd = null;
         selectedEl.textContent = "Select text in the document to add a comment.";
         addEl.disabled = true;
         window.getSelection().removeAllRanges();
@@ -552,7 +563,7 @@
 
         commentsEl.innerHTML = state.comments.map((item, index) => `
           <div class="comment">
-            <small>${index + 1}. ${escapeHtml(item.heading || "Document")}</small>
+            <small>${index + 1}. ${escapeHtml(commentLocation(item))}</small>
             <div class="quote">"${escapeHtml(item.selectedText)}"</div>
             <div class="feedback">${escapeHtml(item.comment)}</div>
             <div class="row">
@@ -572,7 +583,7 @@
 
       function buildPrompt() {
         const comments = state.comments.map((item, index) => {
-          return `${index + 1}. ${item.heading ? `Under "${item.heading}"` : "In the document"}
+          return `${index + 1}. ${commentLocation(item)}
 Selected text:
 "${item.selectedText}"
 
@@ -603,6 +614,30 @@ ${comments || "(No comments were provided.)"}`;
           el = el.parentElement;
         }
         return "";
+      }
+
+      function nearestLineRange(node) {
+        let el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+        while (el && el !== docEl) {
+          if (el.dataset && el.dataset.lineStart) {
+            return {
+              lineStart: Number(el.dataset.lineStart),
+              lineEnd: Number(el.dataset.lineEnd || el.dataset.lineStart),
+            };
+          }
+          el = el.parentElement;
+        }
+        return { lineStart: null, lineEnd: null };
+      }
+
+      function commentLocation(item) {
+        const linePart = formatLineRange(item);
+        const headingPart = item.heading ? ` under "${item.heading}"` : "";
+        return `${linePart}${headingPart}`;
+      }
+
+      function formatLineRange(item) {
+        return item.lineStart ? `Lines ${item.lineStart}${item.lineEnd && item.lineEnd !== item.lineStart ? `-${item.lineEnd}` : ""}` : "No line";
       }
 
       function save() {
@@ -640,34 +675,42 @@ ${comments || "(No comments were provided.)"}`;
         let table = [];
         let code = [];
 
-        const push = (html, weight = 1) => blocks.push({ html, weight });
+        const wrap = (html, lineStart, lineEnd) => `<div data-line-start="${lineStart}" data-line-end="${lineEnd}">${html}</div>`;
+        const push = (html, weight = 1, lineStart = null, lineEnd = lineStart) => {
+          blocks.push({
+            html: lineStart ? wrap(html, lineStart, lineEnd) : html,
+            weight,
+          });
+        };
 
         const flushList = () => {
           if (!list) return;
-          push(`${list.open}${list.items.join("")}${list.close}`, Math.max(1, list.items.length * 0.85));
+          push(`${list.open}${list.items.join("")}${list.close}`, Math.max(1, list.items.length * 0.85), list.lineStart, list.lineEnd);
           list = null;
         };
 
         const flushTable = () => {
           if (table.length === 0) return;
-          const rows = table.filter((row) => !/^\s*\|?\s*:?-{3,}:?\s*\|/.test(row));
+          const rows = table.filter((row) => !/^\s*\|?\s*:?-{3,}:?\s*\|/.test(row.text));
           const html = ["<table>"];
           rows.forEach((row, index) => {
-            const cells = row.replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim());
+            const cells = row.text.replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim());
             html.push("<tr>" + cells.map((cell) => `${index === 0 ? "<th>" : "<td>"}${inline(cell)}${index === 0 ? "</th>" : "</td>"}`).join("") + "</tr>");
           });
           html.push("</table>");
-          push(html.join(""), Math.max(2, rows.length * 0.9));
+          push(html.join(""), Math.max(2, rows.length * 0.9), table[0].lineNo, table[table.length - 1].lineNo);
           table = [];
         };
 
         const flushCode = () => {
           if (code.length === 0) return;
-          push(`<pre><code>${code.map(escapeHtml).join("\n")}</code></pre>`, Math.max(2, code.length * 0.7));
+          push(`<pre><code>${code.map((item) => escapeHtml(item.text)).join("\n")}</code></pre>`, Math.max(2, code.length * 0.7), code[0].lineNo, code[code.length - 1].lineNo);
           code = [];
         };
 
-        for (const line of lines) {
+        for (let i = 0; i < lines.length; i += 1) {
+          const line = lines[i];
+          const lineNo = i + 1;
           if (line.startsWith("```")) {
             flushList();
             flushTable();
@@ -677,13 +720,13 @@ ${comments || "(No comments were provided.)"}`;
           }
 
           if (inCode) {
-            code.push(line);
+            code.push({ text: line, lineNo });
             continue;
           }
 
           if (/^\s*\|.+\|\s*$/.test(line)) {
             flushList();
-            table.push(line);
+            table.push({ text: line, lineNo });
             continue;
           }
           flushTable();
@@ -692,7 +735,7 @@ ${comments || "(No comments were provided.)"}`;
           if (heading) {
             flushList();
             const level = heading[1].length;
-            push(`<h${level}>${inline(heading[2])}</h${level}>`, level === 1 ? 3.2 : level === 2 ? 2.3 : 1.6);
+            push(`<h${level}>${inline(heading[2])}</h${level}>`, level === 1 ? 3.2 : level === 2 ? 2.3 : 1.6, lineNo);
             continue;
           }
 
@@ -700,8 +743,9 @@ ${comments || "(No comments were provided.)"}`;
           if (unordered) {
             if (!list || list.type !== "ul") {
               flushList();
-              list = { type: "ul", open: "<ul>", close: "</ul>", items: [] };
+              list = { type: "ul", open: "<ul>", close: "</ul>", items: [], lineStart: lineNo, lineEnd: lineNo };
             }
+            list.lineEnd = lineNo;
             list.items.push(`<li>${inline(unordered[1])}</li>`);
             continue;
           }
@@ -710,8 +754,9 @@ ${comments || "(No comments were provided.)"}`;
           if (ordered) {
             if (!list || list.type !== "ol") {
               flushList();
-              list = { type: "ol", open: "<ol>", close: "</ol>", items: [] };
+              list = { type: "ol", open: "<ol>", close: "</ol>", items: [], lineStart: lineNo, lineEnd: lineNo };
             }
+            list.lineEnd = lineNo;
             list.items.push(`<li>${inline(ordered[1])}</li>`);
             continue;
           }
@@ -722,7 +767,7 @@ ${comments || "(No comments were provided.)"}`;
           }
 
           flushList();
-          push(`<p>${inline(line)}</p>`, Math.max(1, line.length / 72));
+          push(`<p>${inline(line)}</p>`, Math.max(1, line.length / 72), lineNo);
         }
 
         flushList();

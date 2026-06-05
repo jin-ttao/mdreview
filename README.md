@@ -18,14 +18,28 @@ Coding agents are good at producing specs, PRDs, architecture notes, and review 
 
 ## Usage
 
+Install the local CLI while developing:
+
 ```bash
-node bin/mdreview.js docs/specs/example.md
+npm link
+```
+
+Then open a Markdown file:
+
+```bash
+mdreview docs/specs/example.md
 ```
 
 You can also pass a filename or slug. The CLI searches the current working directory and `~/Desktop/home/code`.
 
 ```bash
-node bin/mdreview.js scan-observability
+mdreview scan-observability
+```
+
+Without linking, run it directly:
+
+```bash
+node bin/mdreview.js docs/specs/example.md
 ```
 
 ## Features
@@ -34,6 +48,7 @@ node bin/mdreview.js scan-observability
 - One-column and two-column page layout toggle
 - Zoom controls
 - Selection-based comments
+- Block-level Markdown line anchors
 - Right-side review panel
 - Copy-for-agent prompt generation
 - Browser `localStorage` persistence per file
@@ -50,3 +65,7 @@ node bin/mdreview.js scan-observability
 ## Prototype Status
 
 This is an early local MVP. Pagination is currently approximate: Markdown blocks are grouped into page cards by weight, then displayed in one or two columns.
+
+## Agent Instruction Snippet
+
+See [docs/agent-instructions.md](docs/agent-instructions.md) for a short instruction you can add to Codex, Claude Code, or project-level agent docs.
